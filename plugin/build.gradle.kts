@@ -8,7 +8,10 @@
 plugins {
     // Apply the Java Gradle plugin development plugin to add support for developing Gradle plugins
     `java-gradle-plugin`
+    kotlin("jvm") version "1.9.10"
 }
+
+version = "1.0.0"
 
 repositories {
     // Use Maven Central for resolving dependencies.
@@ -25,31 +28,11 @@ dependencies {
 gradlePlugin {
     // Define the plugin
     val greeting by plugins.creating {
-        id = "org.example.greeting"
-        implementationClass = "org.example.DeprecatedAfterPlugin"
+        id = "org.danlafeir.deprecated-after"
+        implementationClass = "org.danlafeir.DeprecatedAfter"
     }
 }
 
-// Add a source set for the functional test suite
-val functionalTestSourceSet = sourceSets.create("functionalTest") {
-}
-
-configurations["functionalTestImplementation"].extendsFrom(configurations["testImplementation"])
-configurations["functionalTestRuntimeOnly"].extendsFrom(configurations["testRuntimeOnly"])
-
-// Add a task to run the functional tests
-val functionalTest by tasks.registering(Test::class) {
-    testClassesDirs = functionalTestSourceSet.output.classesDirs
-    classpath = functionalTestSourceSet.runtimeClasspath
-    useJUnitPlatform()
-}
-
-gradlePlugin.testSourceSets.add(functionalTestSourceSet)
-
-tasks.named<Task>("check") {
-    // Run the functional tests as part of `check`
-    dependsOn(functionalTest)
-}
 
 tasks.named<Test>("test") {
     // Use JUnit Jupiter for unit tests.
