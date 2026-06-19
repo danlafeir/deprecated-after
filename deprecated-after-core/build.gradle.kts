@@ -1,11 +1,21 @@
 plugins {
     `java-library`
+    `maven-publish`
+    signing
 }
 
 description = "Core scanner and version logic shared by the deprecated-after build-tool plugins."
 
 tasks.withType<JavaCompile>().configureEach {
     options.release = 11
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            from(components["java"])
+        }
+    }
 }
 
 dependencies {

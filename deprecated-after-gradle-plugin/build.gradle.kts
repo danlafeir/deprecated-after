@@ -1,5 +1,7 @@
 plugins {
     `java-gradle-plugin`
+    `maven-publish`
+    signing
 }
 
 description = "Gradle plugin that fails the build when @DeprecatedAfter code outlives the project version."

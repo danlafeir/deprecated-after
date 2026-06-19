@@ -1,6 +1,8 @@
 plugins {
     `java-library`
     alias(libs.plugins.maven.plugin.development)
+    `maven-publish`
+    signing
 }
 
 description = "Maven plugin that fails the build when @DeprecatedAfter code outlives the project version."
@@ -22,6 +24,17 @@ dependencies {
 
 mavenPlugin {
     goalPrefix.set("deprecated-after")
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            from(components["java"])
+            pom {
+                packaging = "maven-plugin"
+            }
+        }
+    }
 }
 
 // maven-plugin-tools generates the descriptor/help-mojo via Velocity, which is not
