@@ -1,198 +1,174 @@
-# DeprecatedAfter Gradle Plugin
+# DeprecatedAfter
 
-A Gradle plugin that validates `@DeprecatedAfter` annotations against the current project version and breaks the build when deprecated elements should be removed.
+Mark code with `@DeprecatedAfter("x.y.z")` and have your **build fail once the project's
+version moves past that version** — so deprecated code can't silently outlive its removal
+window. Works identically under **Gradle** and **Maven**.
 
-## Features
-
-- **Version-based deprecation**: Mark elements for removal after specific versions
-- **Automatic validation**: Runs during compilation to check deprecated elements
-- **Build failure**: Breaks the build when deprecated code should be removed
-- **Semantic versioning support**: Properly compares version numbers
-- **Java and Kotlin support**: Annotations available for both languages
-
-## How to Run the Tests
-
-### Run All Tests
-```bash
-./gradlew test
-```
-
-## How to Build It
-
-### Build the Plugin
-```bash
-./gradlew build
-```
-
-The built plugin JAR will be available in `plugin/build/libs/`.
-
-## How to Use It
-
-### 1. Apply the Plugin
-
-Add to your `build.gradle.kts`:
-```kotlin
-plugins {
-    id("org.danlafeir.deprecated-after") version "1.0.0"
-}
-
-version = "1.0.0" // Required for validation
-```
-
-Or in `build.gradle`:
-```groovy
-plugins {
-    id 'org.danlafeir.deprecated-after' version '1.0.0'
-}
-
-version = '1.0.0' // Required for validation
-```
-
-### 2. Use the Annotation
-
-#### Java Example
 ```java
-import org.danlafeir.DeprecatedAfter;
-
-@DeprecatedAfter(
-    value = "2.0.0", 
-    reason = "Legacy API", 
-    replacement = "NewApiClass"
-)
-public class OldApiClass {
-    // This will cause build failure when project version >= 2.0.0
-}
-
-@DeprecatedAfter("1.5.0")
-public void oldMethod() {
-    // This method should be removed after version 1.5.0
-}
+@DeprecatedAfter(value = "2.0.0", reason = "Legacy API", replacement = "NewApiClass")
+public class OldApiClass { }
 ```
 
-#### Kotlin Example
+Once the project version becomes strictly greater than `2.0.0` (e.g. `2.0.1`), the build fails
+until `OldApiClass` is removed.
+
+## How it works
+
+- The `@DeprecatedAfter` annotation has **`CLASS` retention** — it is written to bytecode but not
+  loaded at runtime, so you depend on it with `compileOnly` / `provided` scope and ship nothing
+  extra in your application.
+- A build-tool plugin scans your compiled classes (via ASM, no classloading) and compares each
+  annotated element's version against the project version using Semantic Versioning.
+- An element fails the build only when `projectVersion` is **strictly greater** than its
+  `@DeprecatedAfter` value. Pre-releases sort below their release (`2.0.0-SNAPSHOT` < `2.0.0`), so
+  a snapshot of the threshold version does not trip the gate.
+
+## Artifacts
+
+All published to Maven Central under group `com.lafeir`:
+
+| Artifact | Purpose |
+|----------|---------|
+| `deprecated-after-annotation` | The `@DeprecatedAfter` annotation (zero dependencies). Add to your project. |
+| `deprecated-after-gradle-plugin` | Gradle plugin (id `com.lafeir.deprecated-after`). |
+| `deprecated-after-maven-plugin` | Maven plugin (goal `deprecated-after:check`). |
+| `deprecated-after-core` | Shared scanner + version logic. Pulled in transitively by the plugins. |
+
+## Gradle
+
+The plugin is published to Maven Central (not the Gradle Plugin Portal), so add `mavenCentral()`
+to plugin resolution in `settings.gradle.kts`:
+
 ```kotlin
-import org.danlafeir.DeprecatedAfter
-
-@DeprecatedAfter(
-    value = "2.0.0", 
-    reason = "Use new coroutine-based API", 
-    replacement = "newSuspendFunction"
-)
-fun oldFunction() {
-    // This function should be removed after version 2.0.0
+pluginManagement {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
 }
 ```
 
-### 3. Validation
+Then apply it and depend on the annotation in `build.gradle.kts`:
 
-The plugin automatically validates annotations during compilation. You can also run manual validation:
+```kotlin
+plugins {
+    java
+    id("com.lafeir.deprecated-after") version "0.1.0"
+}
+
+version = "1.0.0" // the version checked against @DeprecatedAfter
+
+dependencies {
+    compileOnly("com.lafeir:deprecated-after-annotation:0.1.0")
+}
+```
+
+The plugin registers a `validateDeprecatedAfter` task and wires it into `check`, so it runs as
+part of `./gradlew check` (or `./gradlew build`). Run it directly with:
 
 ```bash
 ./gradlew validateDeprecatedAfter
 ```
 
-### 4. Example Build Failure
+## Maven
 
-When your project version reaches or exceeds the deprecation version:
+Declare the annotation as a `provided` dependency and bind the plugin to the build:
 
-```
-> Task :validateDeprecatedAfter FAILED
+```xml
+<dependencies>
+  <dependency>
+    <groupId>com.lafeir</groupId>
+    <artifactId>deprecated-after-annotation</artifactId>
+    <version>0.1.0</version>
+    <scope>provided</scope>
+  </dependency>
+</dependencies>
 
-FAILURE: Build failed with an exception.
-
-* What went wrong:
-Execution failed for task ':validateDeprecatedAfter'.
-> @DeprecatedAfter validation failed! The following deprecated elements should be removed:
-  - com.example.OldClass (deprecated after version 1.0.0) - Reason: Legacy API - Use: NewClass
-  - com.example.MyClass.oldMethod() (deprecated after version 1.0.0)
-  Current project version: 1.0.0
-```
-
-## How to Publish to Gradle Plugin Portal
-
-### 1. Set Up Credentials
-
-Create `~/.gradle/gradle.properties` with your Gradle Plugin Portal credentials:
-```properties
-gradle.publish.key=your-api-key
-gradle.publish.secret=your-api-secret
-```
-
-### 2. Configure Publishing
-
-Add to `plugin/build.gradle.kts`:
-```kotlin
-gradlePlugin {
-    website = "https://github.com/danlafeir/deprecated-after"
-    vcsUrl = "https://github.com/danlafeir/deprecated-after.git"
-    
-    val deprecatedAfter by plugins.creating {
-        id = "org.danlafeir.deprecated-after"
-        implementationClass = "org.danlafeir.DeprecatedAfter"
-        displayName = "DeprecatedAfter Plugin"
-        description = "Validates @DeprecatedAfter annotations against project version"
-        tags = listOf("deprecated", "validation", "version", "cleanup")
-    }
-}
+<build>
+  <plugins>
+    <plugin>
+      <groupId>com.lafeir</groupId>
+      <artifactId>deprecated-after-maven-plugin</artifactId>
+      <version>0.1.0</version>
+      <executions>
+        <execution>
+          <goals><goal>check</goal></goals>
+        </execution>
+      </executions>
+    </plugin>
+  </plugins>
+</build>
 ```
 
-### 3. Publish
+The `check` goal binds to the `verify` phase by default, so it runs on `mvn verify`. Skip it with
+`-DdeprecatedAfter.skip=true`.
+
+## The annotation
+
+```java
+import com.lafeir.deprecatedafter.DeprecatedAfter;
+
+@DeprecatedAfter("1.5.0")
+public void oldMethod() { }
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `value` | Yes | Version after which the element must be removed, e.g. `"2.0.0"`. |
+| `reason` | No | Reason for deprecation, shown in the failure message. |
+| `replacement` | No | Suggested replacement, shown in the failure message. |
+
+Applicable to classes/interfaces, methods/constructors, and fields.
+
+### Example failure
+
+```
+@DeprecatedAfter validation failed! The following deprecated elements should be removed:
+  - com.example.OldApiClass (deprecated after version 2.0.0) - Reason: Legacy API - Use: NewApiClass
+Current project version: 2.0.1
+```
+
+## Version handling
+
+Versions are compared per Semantic Versioning 2.0.0:
+
+- Numeric core compared field by field; missing trailing fields are treated as zero (`1.0` == `1.0.0`).
+- A pre-release sorts **below** its release: `2.0.0-SNAPSHOT` and `2.0.0-alpha` are both `< 2.0.0`.
+- Build metadata (`+sha`) is ignored.
+- If the project version is unset/`unspecified`, validation is skipped with a warning.
+
+## Building from source
 
 ```bash
-# Validate the plugin
-./gradlew validatePlugins
-
-# Publish to Gradle Plugin Portal
-./gradlew publishPlugins
+./gradlew build               # compile + run all tests
+./gradlew publishToMavenLocal # install all artifacts to ~/.m2 (signing skipped without a key)
 ```
 
-### 4. Local Publishing (for testing)
+## Publishing to Maven Central
+
+Publishing uses Gradle's built-in `maven-publish` + `signing` (no third-party publishing plugin)
+and targets the [Central Portal](https://central.sonatype.com).
+
+Prerequisites:
+
+1. **Verify the `com.lafeir` namespace** in the Central Portal (DNS TXT record on `lafeir.com`).
+2. A Central Portal **publishing token**, exposed as:
+   - `ORG_GRADLE_PROJECT_mavenCentralUsername`
+   - `ORG_GRADLE_PROJECT_mavenCentralPassword`
+3. A **GPG signing key**, exposed as:
+   - `ORG_GRADLE_PROJECT_signingInMemoryKey` (ASCII-armored private key)
+   - `ORG_GRADLE_PROJECT_signingInMemoryKeyPassword`
+
+Then build the upload bundle and post it to the Portal:
 
 ```bash
-# Publish to local Maven repository
-./gradlew publishToMavenLocal
-
-# Use in other projects
-repositories {
-    mavenLocal()
-    gradlePluginPortal()
-}
+./gradlew clean publishAllPublicationsToStagingRepository centralBundle
+curl --request POST \
+  --header "Authorization: Bearer $CENTRAL_PORTAL_TOKEN" \
+  --form bundle=@build/central/central-bundle-0.1.0.zip \
+  https://central.sonatype.com/api/v1/publisher/upload
 ```
-
-## Configuration
-
-### Project Version Requirement
-
-The plugin requires your project to have a version set. If no version is specified, validation will be skipped with a warning.
-
-```kotlin
-version = "1.0.0" // Required
-```
-
-### Supported Version Formats
-
-The plugin supports semantic versioning:
-- `1.0.0`
-- `1.0.0-SNAPSHOT`
-- `1.0.0-alpha`
-- `2.1.5`
-
-## Annotation Parameters
-
-| Parameter | Required | Description | Example |
-|-----------|----------|-------------|---------|
-| `value` | Yes | Version after which element should be removed | `"2.0.0"` |
-| `reason` | No | Reason for deprecation | `"Legacy API"` |
-| `replacement` | No | Suggested replacement | `"NewClass"` |
-
-## Supported Elements
-
-The `@DeprecatedAfter` annotation can be applied to:
-- Classes and interfaces
-- Methods and functions
-- Fields and properties
-- Constructors
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
+Apache License 2.0 — see the [LICENSE](LICENSE) file.
