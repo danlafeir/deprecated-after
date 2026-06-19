@@ -78,8 +78,12 @@ subprojects {
 // (POST to the Central Portal) is a manual step documented in the README.
 tasks.register<Zip>("centralBundle") {
     group = "publishing"
-    description = "Zips build/staging-deploy into a Central Portal upload bundle."
-    from(stagingRepo)
+    description = "Publishes every module to the staging repo and zips it into a Central Portal bundle."
+    dependsOn(subprojects.map { "${it.path}:publishAllPublicationsToStagingRepository" })
+    from(stagingRepo) {
+        // The Central Portal generates repository metadata itself; don't upload stale copies.
+        exclude("**/maven-metadata.xml*")
+    }
     destinationDirectory.set(layout.buildDirectory.dir("central"))
     archiveFileName.set("central-bundle-${project.version}.zip")
 }
